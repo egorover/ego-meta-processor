@@ -1,0 +1,115 @@
+{
+  "name": "3.06.11 Qwe - TR - Test Runner",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// ===== ГЕНЕРАЦИЯ ТЕСТОВОГО НАБОРА =====\nconst baseUrl = 'http://localhost:5678/webhook-test/order-v2';\n\nconst tests = [\n  // БЛОК A: Оригинал #1\n  { label: 'ОРИГИНАЛ #1', customer: 'Алексей', contact: 'alexey@test.ru', text: 'Здравствуйте! Нужно масло OIL-5W40 2 шт', headers: {} },\n\n  // БЛОК B: Лесенка E1-E6\n  { label: 'E1 — без адреса', customer: 'Борис', contact: 'boris@test.ru', text: 'Нужно масло OIL-5W40 2 шт', headers: {} },\n  { label: 'E2 — + адрес → DONE', customer: 'Борис', contact: 'boris@test.ru', text: 'Нужно масло OIL-5W40 2 шт. Доставка: г. Москва, ул. Тверская, д. 1, кв. 5', headers: {} },\n  { label: 'E3 — срочно → DONE+surcharge', customer: 'Виктор', contact: 'viktor@test.ru', text: 'Срочно нужно масло OIL-5W40 2 шт! Доставка: г. Москва, ул. Тверская, д. 1, кв. 5. Примечание: позвоните перед доставкой', headers: {} },\n  { label: 'E4 — мульти → DONE', customer: 'Галина', contact: 'galina@test.ru', text: 'Нужны колодки BRK-310 1 шт и фильтр воздушный FLT-200 3 шт. Доставка: г. Санкт-Петербург, Невский пр., д. 100', headers: {} },\n  { label: 'E5 — вне каталога → NEEDS_REVIEW', customer: 'Дмитрий', contact: 'dmitry@test.ru', text: 'Нужен антифриз G12 5 литров. Доставка: г. Казань, ул. Баумана, д. 5', headers: {} },\n  { label: 'E6 — смешанный → NEEDS_REVIEW', customer: 'Елена', contact: 'elena@test.ru', text: 'Нужно масло OIL-5W40 2 шт и антифриз G12 1 л. Доставка: г. Казань, ул. Баумана, д. 5', headers: {} },\n\n  // БЛОК B: Особые случаи T2-T8\n  { label: 'T2 — нет контакта → 422', customer: 'Тест', contact: '', text: 'Нужно масло', headers: {} },\n  { label: 'T3 — длинный текст → 413', customer: 'Тест', contact: 'test_long@test.ru', text: 'А'.repeat(2500), headers: {} },\n  { label: 'T4 — петля → 508', customer: 'Тест', contact: 'test_loop@test.ru', text: 'Тест петель', headers: { 'x-loop-depth': '1' } },\n  { label: 'T5 — дубль E2 → DUPLICATE', customer: 'Борис', contact: 'boris@test.ru', text: 'Нужно масло OIL-5W40 2 шт. Доставка: г. Москва, ул. Тверская, д. 1, кв. 5', headers: {} },\n  // T6 и T7 требуют ручной подготовки (сломать ключ / выключить settings) — помечены комментарием\n  // { label: 'T6 — авария модели → 502', customer: 'Фёдор', contact: 'fedor@test.ru', text: 'Нужен фильтр масляный FLT-100 1 шт. Доставка: г. Новосибирск, ул. Ленина, д. 25', headers: {} },\n  // { label: 'T7 — выключатель → 503', customer: 'Тест', contact: 'test_switch@test.ru', text: 'Тест выключателя', headers: {} },\n  { label: 'T8a — лимит 1/2', customer: 'Спам', contact: 'spam@test.ru', text: 'Заказ номер 1', headers: {} },\n  { label: 'T8b — лимит 2/2', customer: 'Спам', contact: 'spam@test.ru', text: 'Заказ номер 2', headers: {} },\n  { label: 'T8c — лимит 3/2 → RATE_LIMITED', customer: 'Спам', contact: 'spam@test.ru', text: 'Заказ номер 3', headers: {} },\n\n  // БЛОК C: Оригинал #2\n  { label: 'ОРИГИНАЛ #2 — богатый', customer: 'Мария', contact: 'maria@test.ru', text: 'Здравствуйте! Нужны колодки тормозные BRK-310 2 шт и масло моторное OIL-5W40 1 шт. Доставка: г. Новосибирск, ул. Ленина, д. 25, кв. 8', headers: {} },\n\n  // БЛОК D: Оригинал #3\n  { label: 'ОРИГИНАЛ #3 — срочный самовывоз', customer: 'Пётр', contact: 'petr@test.ru', text: 'Срочно: нужен фильтр масляный FLT-100 1 шт. Самовывоз: г. Екатеринбург, ул. Ленина, д. 15, офис 3. Примечание: пропуск закажите заранее', headers: {} },\n];\n\nreturn tests.map(t => ({ json: { ...t, url: baseUrl } }));"
+      },
+      "id": "7bb23390-3df3-4718-9ffb-aea3dc05bbb3",
+      "name": "Генерация тестов",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -112,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json; charset=utf-8"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ customer: $json.customer, contact: $json.contact, text: $json.text }) }}",
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
+      },
+      "id": "76ab7cde-410c-4c02-973f-6da24f25963c",
+      "name": "HTTP Request: отправить тест",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        144,
+        16
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== СБОР РЕЗУЛЬТАТОВ =====\nconst results = $input.all().map(item => {\n  const label = item.json.label || 'unknown';\n  const statusCode = item.json.statusCode || item.json.error?.statusCode || 'N/A';\n  const body = item.json.body || item.json.error?.message || '';\n  return { label, statusCode, body: typeof body === 'string' ? body.slice(0, 200) : JSON.stringify(body).slice(0, 200) };\n});\n\nconst summary = results.map(r => `${r.label} → ${r.statusCode}`).join('\\n');\nreturn [{ json: { summary, results } }];"
+      },
+      "id": "0e69dcd2-cc30-4a90-9ee1-db795db5f826",
+      "name": "Сводка результатов",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "content": "ИНСТРУКЦИЯ для Test Runner\n1. Для чистоты Тестов - полностью очистите таблицы orders и log  в NocoDB\n\n2. Убедитесь, что 3.06.10 Qwe - OP слушает вебхук\n\n3. Откройте ноду «Генерация тестов» и надавите кнопку \"Execute Step\" - пошаговый запуск \n\n4. Последовательно проделайте аналогичный запуск для нод «HTTP request:» и «Сводка результатов»\n\n5. После получения результата, вернитесь в NocoDB и посмотрите записи в таблицах orders и log\n  ",
+        "height": 240,
+        "width": 752,
+        "color": "#103D1F"
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -144,
+        -256
+      ],
+      "id": "a16f722f-edb4-4b2d-8012-c8ab62bb3a26",
+      "name": "Sticky Note"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Генерация тестов": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request: отправить тест",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request: отправить тест": {
+      "main": [
+        [
+          {
+            "node": "Сводка результатов",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "31580aaa-5249-41aa-b2f9-4746bd492191",
+  "meta": {
+    "instanceId": "b111416093a3f13c8305b0051cf2e1ae136c2858c7cc82d15088245f0e537d53"
+  },
+  "nodeGroups": [],
+  "id": "NzG4kTdrrXnAKJLk",
+  "tags": []
+}

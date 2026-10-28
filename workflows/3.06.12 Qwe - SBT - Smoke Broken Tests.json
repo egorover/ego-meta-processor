@@ -1,0 +1,119 @@
+{
+  "name": "3.06.12 Qwe - SBT - Smoke Broken Tests",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const tests = [\n  // T6: Авария модели\n  /*\n  {\n    json: {\n      label: 'T6_SBT — авария модели → 502',\n      customer: 'SST_Fedor',\n      contact: 'sbt_fedor@test.ru',\n      text: 'Нужен фильтр масляный FLT-100 1 шт.',\n      headers: {}\n    }\n  },\n  */\n\n  // T7: Выключатель\n  /*\n  {\n    json: {\n      label: 'T7_SBT — выключатель → 503',\n      customer: 'SST_Test',\n      contact: 'sbt_switch@test.ru',\n      text: 'Тест выключателя SST',\n      headers: {}\n    }\n  }\n  */\n];\n\n// Временная проверка - удали после запуска\nconsole.log('Количество тестов:', tests.length);\nconsole.log('Первый тест:', JSON.stringify(tests[0], null, 2));\n\nif (tests.length === 0) {\n  throw new Error('⚠️ Нет активных тестов!');\n}\nreturn tests;"
+      },
+      "id": "42a42855-785b-4b8e-9e64-f66d37001bea",
+      "name": "Генерация SBT",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -224,
+        128
+      ],
+      "notes": "️ По умолчанию пустой массив. Раскомментируйте тесты только при активной подготовке среды."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json; charset=utf-8"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ customer: $json.customer, contact: $json.contact, text: $json.text }) }}",
+        "options": {
+          "allowUnauthorizedCerts": true,
+          "response": {}
+        }
+      },
+      "id": "a96fbed0-d83d-4108-91e1-f7c3f440dd0e",
+      "name": "HTTP: отправить SBT",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        32,
+        128
+      ],
+      "onError": "continueRegularOutput",
+      "notes": "Continue on Error критичен для проверки 4xx/5xx ответов"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== СВОДКА РЕЗУЛЬТАТОВ SBT (Защищенная версия) =====\nconst results = $input.all().map(item => {\n  const data = item.json || {};\n  \n  // Безопасное извлечение меток\n  const label = data.label || 'unknown_test';\n  const statusCode = data.statusCode || (data.error && data.error.statusCode) || 'N/A';\n  \n  // Безопасная обработка тела ответа (строка/объект/undefined)\n  let body = '';\n  if (typeof data.body === 'string') {\n    body = data.body.slice(0, 300);\n  } else if (data.body && typeof data.body === 'object') {\n    body = JSON.stringify(data.body).slice(0, 300);\n  } else if (data.error && typeof data.error.message === 'string') {\n    body = data.error.message.slice(0, 300);\n  } else {\n    body = 'No response body or error details available';\n  }\n\n  return { label, statusCode, body };\n});\n\n// Формирование итоговой сводки\nconst summary = results.length > 0 \n  ? results.map(r => `${r.label} → ${r.statusCode}`).join('\\n')\n  : '⚠️ Нет активных тестов. Раскомментируйте строки T6/T7 в ноде \"Генерация SBT\" перед запуском.';\n\nreturn [{ json: { \n  summary,\n  results,\n  timestamp: new Date().toISOString(),\n  test_count: results.length\n} }];"
+      },
+      "id": "354054b6-8c1c-488e-856a-7473d2431e64",
+      "name": "Сводка SBT",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        288,
+        128
+      ],
+      "notes": "Финальная сводка для копирования в отчет или чат"
+    },
+    {
+      "parameters": {
+        "content": "ИНСТРУКЦИЯ для SBT \n1. Убедитесь, что 3.06.10 Qwe - OP слушает вебхук\n\n2. Откройте ноду «Генерация SBT». Вы увидите, что массив return [...] сейчас пуст (все тесты закомментированы). Это сделано специально для безопасности.\n\n3. Когда будете готовы проверить конкретный сбой:\n - Подготовьте среду (сломайте ключ ИЛИ выключите orders_enabled).\n - Сломать ключ: В ноде Yandex заменить модель на несуществующуюю- \"gpt://b1g5ro79nraja33819n8/yandexgpt/nonexistent-model-v999\"\n - Раскомментируйте только один соответствующий блок в коде ноды «Генерация SBT».   \n - Запустите воркфлоу пошагово (Execute Step в каждой ноде последовательно) \n\n4. После получения результата сразу же:\n   - Почините среду.\n   - Закомментируйте тест обратно.\n   - Сохраните ноду снова.",
+        "height": 400,
+        "width": 768,
+        "color": "#0B280D"
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -304,
+        -320
+      ],
+      "id": "8c4bf2ae-f6cb-4857-b9c4-dce393325b06",
+      "name": "Sticky Note"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Генерация SBT": {
+      "main": [
+        [
+          {
+            "node": "HTTP: отправить SBT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP: отправить SBT": {
+      "main": [
+        [
+          {
+            "node": "Сводка SBT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "ca20fcde-0a20-4cad-be90-8a6a91eed8f9",
+  "meta": {
+    "instanceId": "b111416093a3f13c8305b0051cf2e1ae136c2858c7cc82d15088245f0e537d53"
+  },
+  "nodeGroups": [],
+  "id": "pcqvhLaPZAJmD0Hy",
+  "tags": []
+}
