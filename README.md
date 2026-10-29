@@ -1,95 +1,76 @@
-# 🤖 EgoMeta Processor: Обработка заказов v2
-AI-powered pipeline для автоматической обработки заказов на базе n8n, NocoDB и LLM (YandexGPT/GigaChat). Система реализует принципы **Meta Automation**: минимум ручных операций, гарантированное логирование всех исходов и маршрутизация через данные, а не структуру схемы.
+# EgoMeta Processor — обработка заказов на n8n + NocoDB + YandexGPT
 
-### 📄 `README.md` (Русскоязычная версия)
+**Статус:** MVP (минимально жизнеспособный продукт). Не является production-решением: имеет известные ограничения и план доработки (v.3).  
+**Версия документации:** 1.1.0 | **Дата:** 29.10.2026  
+**Автор:** Александр Егоров (Alex Egorov) | AI Developer & Prompt Engineer  
+**GitHub:** [egorover](https://github.com/egorover) | **Telegram:** [@egorover_ai](https://t.me/egorover_ai)  
+**Учебный контекст:** ДЗ урока PEn06 «Развёртывание ИИ-ассистента на сервере»
 
-Документ адаптирован для русскоязычной аудитории с сохранением технических терминов на английском там, где это общепринятая практика в разработке.
+## 1. Что это и в каком состоянии
 
-## 🏗 Архитектура проекта
+MVP-пайплайн приёма и разбора заказов в свободной форме: вебхук → валидация → идемпотентность и лимиты → создание строки `processing` → разбор ИИ-агентом (YandexGPT через OpenAI-совместимую ноду) → расчёт стоимости → обновление статуса → ответ клиенту / Telegram-алерт → журнал стадий.
 
-Проект состоит из трех изолированных воркфлоу, обеспечивающих безопасность разработки и надежность продакшена:
+**Готово и проверено тестами:**
+- валидация входа с осмысленными кодами причин (422/413/508);
+- идемпотентность (derived-ключ) и лимит частоты (20/час);
+- двухшаговая запись (processing → done/failed) и `retry_payload` при сбое;
+- ветка ошибки агента: код ошибки определяется кодом, алерт в Telegram, ответ 502;
+- мягкий выключатель `orders_enabled` (503);
+- прозрачная очередь ревью (`review_reason`);
+- регрессионный контур TR и изолированный контур SBT.
 
-| Компонент | Файл | Назначение |
+**Не готово (ограничения MVP):** см. раздел 4.
+
+## 2. Компоненты
+
+| Сценарий | Файл | Назначение |
 | :--- | :--- | :--- |
-| **Order Processing (OP)** | `3.06.10 Qwe - OP - Order Processing v2 (improved final)` | Основной боевой пайплайн. Валидация, идемпотентность, разбор заказов ИИ-агентом, обновление статусов в NocoDB. |
-| **Test Runner (TR)** | `3.06.11 Qwe - TR - Test Runner` | Автоматизированный регрессионный тест для проверки happy-path сценариев и граничных условий валидации. |
-| **Smoke Broken Tests (SBT)** | `3.06.12 Qwe - SBT - Smoke Broken Tests` | Изолированный контур для проверки failure-handling: аварии LLM, circuit breaker, rate limiting. |
+| Основной процесс | `3.06.10 Qwe - OP - Order Processing v2 (improved final)` | Боевой MVP-воркфлоу обработки заказов |
+| Здоровый прогон | `3.06.11 Qwe - TR - Test Runner` | Регрессия: happy path, валидация, дубли, лимит |
+| Сломанные тесты | `3.06.12 Qwe - SBT - Smoke Broken Tests` | Проверка деградации: авария LLM (T6), выключатель (T7) |
 
-### 🔑 Ключевые фичи v2
-- **Catalog-aware Parsing:** ИИ-агент сопоставляет позиции с внутренним каталогом (SKU matching). Неизвестные товары автоматически уходят в очередь `needs_review`.
-- **Transparent Review Queue:** Поле `review_reason` в таблице заказов объясняет менеджеру причину ручной проверки (`no_address`, `unknown_items`, `llm_failed`).
-- **Guaranteed Logging:** Все события (включая rejected/duplicate) фиксируются в таблице `log` с HTTP-кодами и кодами ошибок.
-- **Circuit Breaker Pattern:** Возможность мгновенного отключения приема заказов через флаг `orders_enabled` в NocoDB без деплоя.
-- **Isolated Failure Testing:** SBT-раннер использует префикс `sbt_` для контактов, исключая загрязнение боевых данных при проверке деградации.
+## 3. Ключевые решения
 
-## 📋 Протокол тестирования
+- **Каталог в промпте:** агент сопоставляет позиции с SKU (FLT-100, FLT-200, OIL-5W40, BRK-310); нераспознанное уходит в `needs_review`, а не молча теряется.
+- **Review Reason:** каждый `needs_review` объясним машиночитаемой причиной (`no_address`, `unknown_items:N`, `llm_failed:*`).
+- **Коды ошибок без модели:** транспортные/форматные/схемные отказы классифицируются детерминированным кодом (regex по сообщению), а не вторым вызовом LLM.
+- **Изоляция сломанных тестов:** контакты с префиксом `sbt_` не загрязняют боевые данные.
 
-Полная инструкция по запуску регрессии и сломанных тестов доступна в файле **[docs/TESTING_PROTOCOL.md](docs/TESTING_PROTOCOL.md)**.
+## 4. Известные ограничения MVP
 
-> ⚠️ **Важно:** Перед первым запуском убедитесь, что в NocoDB созданы дополнительные колонки:
-> - `orders.review_reason` (Text)
-> - `log.http_code` (Number)
+| Ограничение | Наблюдаемый эффект | План |
+| :--- | :--- | :--- |
+| Журнал стадий собран после ноды ответа клиенту | Покрытие `log` нестабильно для отсечённых потоков: в здоровых TR-прогонах rejected-строки писались, в SBT-прогонах записей нет. Нестабильность сама по себе — индикатор дефекта | v.3: перенос «Сборки журнала» сразу после «Проверки дубля и лимита» |
+| Нет отдельного Error Workflow (п.8 ТЗ) | Ошибки обрабатываются веткой агента, а не отдельным сценарием из 3 нод | v.3 |
+| Derived idempotency key | Хэш contact+text не защищает от повтора при изменении текста | Принято; клиент может передать свой ключ заголовком |
+| Ревью-очередь без UI | Менеджер работает напрямую в таблице NocoDB | Пост-MVP |
+| Лимит частоты без защиты от гонок | Два одновременных одинаковых запроса теоретически создадут две строки | Пост-MVP |
 
-## 🚀 Развертывание (Deployment)
+## 5. Тестирование
 
-1. Импортируйте `3.06.10_Qwe_OP_Order_Processing_v2.json` в n8n.
-2. Настройте credentials:
-   - **NocoDB API Token** (для доступа к таблицам orders, log, settings)
-   - **OpenAI account** (для YandexGPT)
-   - **Header Auth** (для NocoDB REST API patch)
-   - **Telegram Bot** (для алертов об ошибках LLM)
-3. Активируйте webhook по пути `/webhook/order-v2`.
-4. Для запуска тестов импортируйте TR и SBT воркфлоу. Убедитесь, что основной OP находится в режиме **Listen for Test Event**.
+Полный протокол: [docs/TESTING_PROTOCOL.md](docs/TESTING_PROTOCOL.md) (v1.1.0).  
+**Важно:** в v.2 критерии приёмки SBT — код HTTP-ответа, состояние таблицы `orders`, Telegram-алерт. Записи в `log` для SBT-прогонов **не ожидаются** (см. ограничения).
 
-##  Технический стек
+## 6. Развёртывание
 
-- **Orchestration:** n8n (v1.x/v2.x)
-- **Database:** NocoDB (REST API v2)
-- **LLM:** YandexGPT (via OpenAI-compatible node), GigaChat (via HTTP Request)
-- **Notifications:** Telegram Bot API
-- **Version Control:** Git (GitHub)
+1. Импортировать `workflows/3.06.10_Qwe_OP_Order_Processing_v2.json`.
+2. Настроить credentials: NocoDB API Token, OpenAI account (YandexGPT), Header Auth, Telegram.
+3. В NocoDB убедиться в наличии колонок: `orders.review_reason` (Text), `log.http_code` (Number).
+4. Тестовый вебхук: `/webhook-test/order-v2` (режим Listen); боевой: `/webhook/order-v2`.
 
-## 👤 Автор
+## 7. Дорожная карта
 
-**Александр Егоров (Alex Egorov)** | AI Developer & Prompt Engineer  
-GitHub: [egorover](https://github.com/egorover) | Telegram: [@egorover_ai](https://t.me/egorover_ai)
+- **v.3 (3.06.13 Qwe - OPv.3):** гарантированное логирование всех исходов; отдельный Error Workflow.
+- **Пост-MVP:** UI ревью-очереди, продуктовая таблица цен вместо константы в коде, идемпотентность на уровне БД, мониторинг стоимости.
 
----
-*Проект разработан в рамках курса по AI-автоматизации. Версия 1.0.0 отражает стабильное состояние системы после полного цикла регрессионного и smoke-тестирования.*
+## 8. Структура репозитория
 
-
-
-# 🤖 EgoMeta Processor: Orders processing v2
-
-
-AI-powered order processing pipeline built with n8n, NocoDB and LLM routing (YandexGPT/GigaChat).
-
-### 📄 `README.md` (English version)
-
-## 🏗 Architecture
-- **3.06.10 Qwe - OP**: Main production workflow. Validates, deduplicates, parses orders via LLM, updates NocoDB.
-- **3.06.11 Qwe - TR**: Automated regression test runner for happy-path scenarios.
-- **3.06.12 Qwe - SBT**: Isolated smoke tests for failure handling (LLM errors, circuit breaker).
-
-## 📋 Key Features
-- Idempotent order processing with derived keys
-- Catalog-based SKU matching with fallback to review queue
-- Guaranteed logging of ALL outcomes (including rejected/duplicate) via pre-branch journal assembly
-- Circuit breaker pattern via NocoDB settings toggle
-- Telegram alerts on LLM failures with retry payload
-
-##  Testing Protocol
-See [docs/TESTING_PROTOCOL.md](docs/TESTING_PROTOCOL.md) for full test suite instructions including:
-- Healthy path regression (E1-E6)
-- Validation edge cases (422, 413, 508)
-- Broken path tests (T6: LLM auth error, T7: circuit breaker)
-
-## 🚀 Deployment
-1. Import `3.06.10_Qwe_OP_Order_Processing_v2.json` into n8n
-2. Configure credentials: NocoDB API Token, OpenAI account (YandexGPT), Header Auth, Telegram
-3. Ensure NocoDB tables exist: `orders` (with `review_reason`), `log` (with `http_code`), `settings`
-4. Activate webhook at `/webhook/order-v2`
-
-##  Author
-**Alexander Egorov (Alex Egorov)** | AI Developer & Prompt Engineer  
-GitHub: [egorover](https://github.com/egorover) | Telegram: [@egorover_ai](https://t.me/egorover_ai)
+```text
+ego-meta-processor/
+├── workflows/ # JSON-экспорты воркфлоу 3.06.10 / 3.06.11 / 3.06.12
+├── docs/
+│   ├── TESTING_PROTOCOL.md
+│   └── screenshots/
+├── README.md
+└── .gitignore
+```
