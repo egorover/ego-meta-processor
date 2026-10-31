@@ -1,0 +1,108 @@
+{
+  "name": "3.06.14 Qwe - EW - Error Workflow",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "004b3f46-8751-4e50-be94-120dcc280d09",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -288,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = $json.execution ?? {};\nconst w = $json.workflow ?? {};\nconst err = e.error ?? {};\nconst text = [\n  '🛑 <b>Авария сценария: необработанная ошибка</b>',\n  '<b>Сценарий:</b> ' + (w.name || 'unknown'),\n  '<b>Упавшая нода:</b> ' + (e.lastNodeExecuted || 'unknown'),\n  '<b>Сообщение:</b> ' + String(err.message || '').slice(0, 300),\n  '<b>Execution ID:</b> ' + (e.id || 'n/a'),\n  '<b>Режим:</b> ' + (e.mode || 'n/a'),\n  '',\n  'Действие дежурного: открыть execution по ID, проверить retry_payload в orders, перезапустить по TESTING_PROTOCOL.md.'\n].join('\\n');\nreturn [{ json: {\n  ts: new Date().toISOString(),\n  workflow_name: w.name || 'unknown',\n  execution_id: e.id || '',\n  last_node: e.lastNodeExecuted || '',\n  error_message: String(err.message || '').slice(0, 500),\n  alert_text: text\n} }];"
+      },
+      "id": "0cad7194-3818-46d1-9912-4544de54fe2c",
+      "name": "Сборка ошибки",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -64,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "8565883617",
+        "text": "={{ $json.alert_text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "ccf0d1de-12e7-4f0b-b391-0063bf721052",
+      "name": "Telegram: алерт дежурному (EW)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        160,
+        64
+      ],
+      "webhookId": "e3451d42-b255-4af9-aa53-8ab936ba26f1",
+      "credentials": {
+        "telegramApi": {
+          "id": "79gRkAG7G1yfD9bL",
+          "name": "TG -Ego Ticket Lab 3.05"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "# 🛡 EW: Инструкция\n\n*Суть:* \n**Ловит только  необработанные Crash Cases:** сбой БД / сбой Сети. \n**Ошибки Модели:** обрабатывает Основной сценарий.\n\n**Подключение:** Settings 3.06.13 → Error Workflow → выбрать \"3.06.14 Qwe - EW - Error Workflow\".\n\n**Тест связки 3.06.13-OP и 3.06.14-EW:**\n1. В ноде **\"HTTP: обновить заказ PATCH\"** (3.06.13) смени порт `8080` → `8081`.\n2. В режиме \"Execute woorkflow\" - отправь тестовый заказ.\n$body = @{ customer=\"Тест\"; contact=\"test@test.ru\"; text=\"Нужно масло\" } | ConvertTo-Json -Compress\nInvoke-RestMethod -Uri \"http://localhost:5678/webhook/order-v2\" -Method Post -ContentType \"application/json\" -Body $body\n\n**Результат:** Алерт 🛑 в TG + статус `processing` в orders.\n\n **3. Откат:** Верни порт `8080`.",
+        "height": 432,
+        "width": 848,
+        "color": "#0D3018"
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -448,
+        -416
+      ],
+      "id": "d56de7df-7ded-4607-9d0e-639eef86063e",
+      "name": "Sticky Note"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Сборка ошибки",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Сборка ошибки": {
+      "main": [
+        [
+          {
+            "node": "Telegram: алерт дежурному (EW)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "73d83db8-d046-40ea-9ec7-fc41f16c783c",
+  "meta": {
+    "instanceId": "b111416093a3f13c8305b0051cf2e1ae136c2858c7cc82d15088245f0e537d53"
+  },
+  "nodeGroups": [],
+  "id": "pdq0TjfQCWCDE0bS",
+  "tags": []
+}
